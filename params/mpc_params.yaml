@@ -1,0 +1,37 @@
+# Parameters for control loop
+pub_twist_cmd: False
+debug_mode: True
+delay_mode: False
+max_speed: 1.25 # unit: m/s
+waypoints_dist: -1.0 # unit: m, set < 0 means computed by node
+local_path_length: 3.0 # unit: m
+waypoints_fov: 2.09
+goal_threshold: 0.2 # unit: m
+controller_freq: 10
+vehicle_L: 0.325 # distance between the front of the vehicle and its center of gravity
+
+# Parameter for MPC solver
+mpc_steps: 20.0
+mpc_ref_cte: 0.0
+mpc_ref_epsi: 0.0
+mpc_ref_vel: 1.25
+mpc_w_cte: 2500.0
+mpc_w_epsi: 2000.0
+mpc_w_vel: 300.0
+mpc_w_delta: 100.0
+mpc_w_accel: 50.0
+mpc_w_turn: 0
+mpc_w_delta_d: 200.0
+mpc_w_accel_d: 40.0
+mpc_max_steering: 0.436 # Maximal steering radian (~25 deg)
+mpc_max_throttle: 1.0 # Maximal throttle accel
+mpc_bound_value: 1.0e3 # Bound value for other variables
+
+###Frame names
+car_frame: base_link
+#Topic names
+odom_topic_name: /vesc/odom
+goal_topic_name: /move_base_simple/goal
+cmd_vel_topic_name: /vesc/high_level/ackermann_cmd_mux/input/nav_0
+localized_pose_topic_name: /pf/viz/inferred_pose
+
