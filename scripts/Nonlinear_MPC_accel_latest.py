@@ -17,6 +17,8 @@ class MPC:
         self.dT = 0.1
         self.N = 30
         self.L = 0.325
+        self.a_max=1.0
+        self.a_min=-1.0
         self.v_max = 0.6
         self.v_min = -self.v_max
         self.theta_max = pi / 6
@@ -58,16 +60,19 @@ class MPC:
         x = SX.sym('x')
         y = SX.sym('y')
         psi = SX.sym('psi')
-        #Controls
         v = SX.sym('v')
+        cte = SX.sym('cte')
+        epsi = SX.sym('epsi')
+        #Controls
+        a = SX.sym('a')
         theta = SX.sym('theta')
 
-        states = vertcat(x, y, psi)
-        controls = vertcat(v, theta)
+        states = vertcat(x, y, psi,v,cte,epsi)
+        controls = vertcat(a, theta)
         self.n_states = states.size1()
         self.n_controls = controls.size1()
         self.T_V = self.n_states + self.n_controls
-        rhs = vertcat(v * cos(psi), v * sin(psi), (v / self.L) * theta)   # dynamic equations of the states
+        rhs = vertcat(v * cos(psi), v * sin(psi), (v / self.L) * theta,a,0,0)   # dynamic equations of the states
         self.f = Function('f', [states, controls], [rhs])  # nonlinear mapping function f(x,u)
         self.U = SX.sym('U', self.n_controls, self.N)
 
@@ -77,17 +82,20 @@ class MPC:
         self.X = SX.sym('X', self.n_states, (self.N + 1))
         # A vector that represents the states over the optimization problem
 
-        self.Q = SX.zeros(3, 3)
+        self.Q = SX.zeros(self.n_states, self.n_states)
         self.Q[0, 0] = 0
-        self.Q[1, 1] = self.param['mpc_w_cte']       #cross track error
-        self.Q[2, 2] = self.param['mpc_w_epsi']       # heading error. weighing matrices (states)
+        self.Q[1, 1] = 0
+        self.Q[2, 2] = 0
+        self.Q[3, 3] = self.param['mpc_w_vel']
+        self.Q[4, 4] = self.param['mpc_w_cte']       #cross track error
+        self.Q[5, 5] = self.param['mpc_w_epsi']       # heading error. weighing matrices (states)
 
         self.R = SX.zeros(2, 2)
-        self.R[0, 0] = self.param['mpc_w_vel']    #use of velocity control
+        self.R[0, 0] = self.param['mpc_w_accel']    #use of accelerator actuator
         self.R[1, 1] = self.param['mpc_w_delta']  # use of steering actuator.  weighing matrices (controls)
 
         self.S = SX.zeros(2, 2)
-        self.S[0, 0] = self.param['mpc_w_accel']  #change in velocity i.e, acceleration
+        self.S[0, 0] = self.param['mpc_w_accel_d']  #change in velocity i.e, acceleration
         self.S[1, 1] = self.param['mpc_w_delta_d']  #change in steering angle. weighing matrices (change in controls)
 
         self.obj = 0  # Objective function
@@ -100,6 +108,8 @@ class MPC:
         self.N = param['N']
         self.L = param['L']
         self.theta_max, self.v_max = param['theta_max'], param['v_max']
+        self.a_max=param['a_max']
+        self.a_min=-self.a_max
         self.theta_min = -self.theta_max
         self.v_min = -self.v_max
         self.x_min, self.x_max = param['x_min'], param['x_max']
@@ -126,14 +136,13 @@ class MPC:
     def compute_optimization_cost(self):
         st = self.X[:, 0]  # initial state
         self.g = vertcat(self.g, st - self.P[self.NDP:self.NDP+self.n_states])  # initial condition constraints
-
         for k in range(self.N):
             st = self.X[:, k]
             st_next = self.X[:, k + 1]
             con = self.U[:, k]
             self.f0 = self.get_f0(st[0])
             self.psides0 = self.get_psides(st[0])
-            ref = vertcat(0, self.f0, self.psides0)
+            ref = vertcat(0,0,0,self.P[self.NDP+3 + self.T_V * k], 0, 0)
 
             self.obj = self.obj + mtimes(mtimes((st - ref).T, self.Q), (st - ref)) + mtimes(
                 mtimes((con - self.P[self.NDP+2 * self.n_states + self.T_V * k:self.NDP+2 * self.n_states + self.n_controls + self.T_V * k]).T, self.R),
@@ -142,9 +151,23 @@ class MPC:
                 con_next = self.U[:, k + 1]
                 self.obj += mtimes(mtimes((con_next - con).T, self.S), (con_next - con))
 
-            f_value = self.f(st, con)
-            st_next_euler = st + (self.dT * f_value)
-            self.g = vertcat(self.g, st_next - st_next_euler)  # compute constraints
+            # f_value = self.f(st, con)
+            # st_next_euler = st + (self.dT * f_value)
+            # self.g = vertcat(self.g, st_next - st_next_euler)  # compute constraints
+            x_t,y_t,psi_t,v_t,cte_t,epsi_t= st[0],st[1],st[2],st[3],st[4],st[5]
+            x_t1, y_t1, psi_t1, v_t1, cte_t1, epsi_t1 = st_next[0], st_next[1], st_next[2], st_next[3], st_next[4], st_next[5]
+            a_t,theta_t= con[0],con[1]
+            self.g = vertcat(self.g, x_t1- (x_t+v_t*cos(psi_t)*self.dT))
+            self.g = vertcat(self.g, y_t1 - (y_t + v_t * sin(psi_t) * self.dT))
+            self.g = vertcat(self.g, psi_t1 - (psi_t + v_t * theta_t / self.L* self.dT))
+            self.g = vertcat(self.g, v_t1 - (v_t + a_t *  self.dT))
+            self.g = vertcat(self.g, cte_t1 - (self.f0-y_t + v_t * sin(epsi_t) * self.dT))
+            self.g = vertcat(self.g, epsi_t1 - (self.psides0-epsi_t + v_t * theta_t/self.L * self.dT))
+            # print self.g
+            # print self.obj
+            # input('str')
+
+
 
     def init_ipopt_solver(self):
         #Optimization variables(States+controls) across the prediction horizon
@@ -168,15 +191,15 @@ class MPC:
         self.ubx = np.zeros((self.n_states + (self.n_states + self.n_controls) * self.N, 1))
         #Upper and lower bounds for the state optimization variables
         for k in range(self.N + 1):
-            self.lbx[self.n_states * k:self.n_states * (k + 1), 0] = np.array([[self.x_min, self.y_min, self.psi_min]])
-            self.ubx[self.n_states * k:self.n_states * (k + 1), 0] = np.array([[self.x_max, self.y_max, self.psi_max]])
+            self.lbx[self.n_states * k:self.n_states * (k + 1), 0] = np.array([[self.x_min, self.y_min, self.psi_min,self.v_min,-1000,-1000]])
+            self.ubx[self.n_states * k:self.n_states * (k + 1), 0] = np.array([[self.x_max, self.y_max, self.psi_max,self.v_max,1000,1000]])
         state_count = self.n_states * (self.N + 1)
         #Upper and lower bounds for the control optimization variables
         for k in range(self.N):
             self.lbx[state_count:state_count + self.n_controls, 0] = np.array(
-                [[self.v_min, self.theta_min]])  # v and theta lower bound
+                [[self.a_min, self.theta_min]])  # v and theta lower bound
             self.ubx[state_count:state_count + self.n_controls, 0] = np.array(
-                [[self.v_max, self.theta_max]])  # v and theta upper bound
+                [[self.a_max, self.theta_max]])  # v and theta upper bound
             state_count += self.n_controls
 
     def init_mpc_start_conditions(self):
@@ -184,6 +207,8 @@ class MPC:
         self.X0 = np.zeros((self.n_states, self.N + 1))
 
     def solve(self, initial_state):
+        self.lbx[0:self.n_states, 0] = initial_state
+        self.ubx[0:self.n_states, 0] = initial_state
         p = np.zeros(self.NDP+ self.n_states + self.N * (self.n_states + self.n_controls))
         p[0:self.NDP]=self.coeffs
         p[self.NDP:self.NDP+self.n_states] = initial_state  # initial condition of the robot posture
@@ -192,9 +217,12 @@ class MPC:
             y_ref = 0
             psi_ref = 0
             v_ref = self.param['ref_vel']
+            cte_ref=0
+            epsi_ref=0
+            a_ref=0
             theta_ref = 0
-            p[self.NDP+ self.n_states + self.T_V * k:self.NDP+ 2 * self.n_states + self.T_V * k] = [x_ref, y_ref, psi_ref]
-            p[self.NDP+2 * self.n_states + self.T_V * k:self.NDP+2 * self.n_states + self.n_controls + self.T_V * k] = [v_ref,
+            p[self.NDP+ self.n_states + self.T_V * k:self.NDP+ 2 * self.n_states + self.T_V * k] = [x_ref, y_ref, psi_ref,v_ref,cte_ref,epsi_ref]
+            p[self.NDP+2 * self.n_states + self.T_V * k:self.NDP+2 * self.n_states + self.n_controls + self.T_V * k] = [a_ref,
                                                                                                          theta_ref]
 
         # Initial value of the optimization variables
@@ -225,10 +253,11 @@ class MPCKinematicNode:
                       'L': rospy.get_param('vehicle_L', 0.325),
                       'theta_max': rospy.get_param('mpc_max_steering', 0.523),
                       'v_max': rospy.get_param('max_speed', 2.0),
+                      'a_max': rospy.get_param('max_accel', 1.0),
                       'x_min': rospy.get_param('x_min', -30),
                       'x_max': rospy.get_param('x_max', 30),
-                      'y_min': rospy.get_param('y_min', -30),
-                      'y_max': rospy.get_param('y_max', 30),
+                      'y_min': rospy.get_param('y_min', -10),
+                      'y_max': rospy.get_param('y_max', 10),
                       'psi_min': rospy.get_param('psi_min', -3.14),
                       'psi_max': rospy.get_param('psi_max', 3.14),
                       'ref_vel': rospy.get_param('mpc_ref_vel', 1.25),
@@ -237,6 +266,7 @@ class MPCKinematicNode:
                       'mpc_w_vel': rospy.get_param('mpc_w_vel', 5),
                       'mpc_w_delta': rospy.get_param('mpc_w_delta', 10),
                       'mpc_w_accel': rospy.get_param('mpc_w_accel', 5),
+                      'mpc_w_accel_d': rospy.get_param('mpc_w_accel_d', 5),
                       'mpc_w_delta_d': rospy.get_param('mpc_w_delta_d', 5),
                       'spline_poly_order': rospy.get_param('spline_poly_order', 3),
                       'ipopt_verbose':rospy.get_param('ipopt_verbose', False)
@@ -264,6 +294,7 @@ class MPCKinematicNode:
         self.current_pose = None
         self.current_vel_odom = 0.0
         self.steering_angle = 0.0
+        self.throttle=0.0
 
         self.total_path = self.read_waypoints_from_csv(filename)
         self.local_path = Path()
@@ -305,7 +336,7 @@ class MPCKinematicNode:
             dy = self.total_path.poses[i].pose.position.y - self.current_pos_y
             dist = sqrt(dx * dx + dy * dy)
             delta_yaw = atan2(dy, dx) - self.current_yaw
-            if (((dist < self.LOCAL_PATHLENGTH) and (fabs(delta_yaw) < self.WAYPOINT_FOV)) or (dist < 1.5)):
+            if (((dist < self.LOCAL_PATHLENGTH) and (fabs(delta_yaw) < self.WAYPOINT_FOV)) or (dist < 1.25)):
                 tempPose = PoseStamped()
                 tempPose.header = self.local_path.header
                 tempPose.pose.position.x = self.total_path.poses[i].pose.position.x
@@ -330,12 +361,10 @@ class MPCKinematicNode:
         with open(filename) as f:
             path_points = [tuple(line) for line in csv.reader(f, delimiter=',')]
         path_points = [(float(point[0]), float(point[1]), float(point[2])) for point in path_points]
-        skip=6
-        for idx,point in enumerate(path_points):
-            if idx%skip ==0:
-                header = self.create_header('map')
-                waypoint = Pose(Point(float(point[0]), float(point[1]), 0), self.heading(0.0))
-                path.poses.append(PoseStamped(header, waypoint))
+        for point in path_points:
+            header = self.create_header('map')
+            waypoint = Pose(Point(float(point[0]), float(point[1]), 0), self.heading(0.0))
+            path.poses.append(PoseStamped(header, waypoint))
         return path
 
     def pf_pose_callback(self, msg):
@@ -351,7 +380,6 @@ class MPCKinematicNode:
             if dist2goal < self.GOAL_THRESHOLD:
                 self.goal_reached = True
                 self.goal_received = False
-                self.mpc.init_mpc_start_conditions()
                 rospy.loginfo("Goal Reached !")
                 self.plot_data()
 
@@ -393,7 +421,8 @@ class MPCKinematicNode:
             # Update system inputs: U=[speed(v), steering]
             v = self.current_vel_odom
             steering = self.steering_angle  # radian
-            dt = 1.0/self.CONTROLLER_FREQ
+            throttle=self.throttle
+            dt = self.mpc.dT
             L = self.mpc.L
 
             # Waypoints related parameters
@@ -420,15 +449,18 @@ class MPCKinematicNode:
             self.publish_path_from_coeffs(self.mpc.coeffs)
             print("Control loop time2=:", time.time() - control_loop_start_time)
             cte = np.polyval(self.mpc.coeffs, 0.0)
-            # epsi = atan(self.mpc.coeffs[2])
+            epsi = atan(self.mpc.coeffs[2])
             if self.DELAY_MODE:
                 # Predicting vehicle state at the actual moment of control (current time + delay dt)
-                px_act =  v * dt
-                py_act =  0
-                psi_act = v * steering * dt / L
-                current_state= np.array([px_act,py_act,psi_act])
+                px_pred = v * dt
+                py_pred = 0
+                psi_pred = v * steering * dt / L
+                v_pred = v+ throttle*dt
+                cte_pred = cte+v*np.sin(epsi)*dt
+                epsi_pred = -epsi + psi_pred
+                current_state= np.array([px_pred,py_pred,psi_pred,v_pred,cte_pred,epsi_pred])
             else:
-                current_state= np.array([0.0,0.0,0.0])
+                current_state= np.array([0.0,0.0,0.0,v,cte,epsi])
 
             # Solve MPC Problem
             mpc_time=time.time()
@@ -437,11 +469,15 @@ class MPCKinematicNode:
 
             # MPC result (all described in car frame)
             steering = float(first_control[1]) #radian
-            speed = float(first_control[0])   # speed
+            throttle = float(first_control[0])
+            speed = v+throttle*dt   # accel
             if (speed >= self.param['v_max']):
                 speed = self.param['v_max']
             elif (speed <= (- self.param['v_max'] / 2.0)):
                 speed = - self.param['v_max'] / 2.0
+
+            self.steering_angle = steering
+            self.throttle = throttle
 
             # Display the MPC predicted trajectory
             mpc_traj = Path()
@@ -462,6 +498,7 @@ class MPCKinematicNode:
                 print("DEBUG")
                 print("psi: ",psi)
                 print("V: ",v)
+                print("accel:",throttle)
                 print("coeffs: ",self.mpc.coeffs)
                 print("_steering:",steering)
                 print("_speed: ",speed)
@@ -476,13 +513,14 @@ class MPCKinematicNode:
         else:
             steering = 0.0
             speed = 0.0
+            throttle=0.0
 
         # publish cmd
         ackermann_cmd = AckermannDriveStamped()
         ackermann_cmd.header = self.create_header(self.car_frame)
         ackermann_cmd.drive.steering_angle = steering
         ackermann_cmd.drive.speed = speed
-        # ackermann_cmd.drive.acceleration = throttle
+        ackermann_cmd.drive.acceleration = throttle
         self.ackermann_pub.publish(ackermann_cmd)
 
     def plot_data(self):
@@ -504,7 +542,6 @@ class MPCKinematicNode:
         self.t_plot=[]
         self.steering_plot=[]
         self.v_plot=[]
-        self.cte_plot=[]
         self.current_time=0
 
 if __name__ == '__main__':

@@ -4,10 +4,10 @@
 <!--	This launch file uses the true x, y coordinates from Gazebo and maps it to /pf/viz/inferred_pose to insert into pure_pursuit code.-->
   	<include file="$(find racecar_gazebo)/launch/racecar.launch">
 		  <arg name="world_name" value="track_empty"/>
-		  <arg name="x" default="20.56"/>
-          <arg name="y" default="17.83"/>
+		  <arg name="x" default="20.56"/>  <!--20.56, d 1.18-->
+          <arg name="y" default="17.83"/>  <!--17.83,d 4.48 -->
           <arg name="z" default="0.0"/>
-          <arg name="yaw" default="0.9125"/>
+          <arg name="yaw" default="0.9125"/>  <!--0.9125,d -2.59-->
   	</include>
   
   	<!-- Run map server -->

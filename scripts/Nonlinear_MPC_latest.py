@@ -504,7 +504,6 @@ class MPCKinematicNode:
         self.t_plot=[]
         self.steering_plot=[]
         self.v_plot=[]
-        self.cte_plot=[]
         self.current_time=0
 
 if __name__ == '__main__':

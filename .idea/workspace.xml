@@ -1,12 +1,35 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="2919d328-545f-4bcb-ae2a-ec1f3255e7c1" name="Default Changelist" comment="" />
+    <list default="true" id="2919d328-545f-4bcb-ae2a-ec1f3255e7c1" name="Default Changelist" comment="">
+      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/launch/simulation_gazebo.launch" beforeDir="false" afterPath="$PROJECT_DIR$/launch/simulation_gazebo.launch" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/params/mpc_params.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/params/mpc_params.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rviz/mpc_gazebo_navigation.rviz" beforeDir="false" afterPath="$PROJECT_DIR$/rviz/mpc_gazebo_navigation.rviz" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/Nonlinear_MPC.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/Nonlinear_MPC.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/Nonlinear_MPC_with_weights_change_inputs.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/Nonlinear_MPC_with_weights_change_inputs.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/test.py" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/test.py" afterDir="false" />
+    </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="DatabaseView">
+    <option name="SHOW_INTERMEDIATE" value="true" />
+    <option name="GROUP_DATA_SOURCES" value="true" />
+    <option name="GROUP_SCHEMA" value="true" />
+    <option name="GROUP_CONTENTS" value="false" />
+    <option name="SORT_POSITIONED" value="false" />
+    <option name="SHOW_EMPTY_GROUPS" value="false" />
+    <option name="AUTO_SCROLL_FROM_SOURCE" value="false" />
+    <option name="HIDDEN_KINDS">
+      <set />
+    </option>
+    <expand />
+    <select />
   </component>
   <component name="FileTemplateManagerImpl">
     <option name="RECENT_TEMPLATES">
@@ -15,8 +38,13 @@
       </list>
     </option>
   </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
   <component name="ProjectId" id="1OhvoR54voxDnDoHrIzzD37frA3" />
+  <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
   <component name="PropertiesComponent">
+    <property name="SHARE_PROJECT_CONFIGURATION_FILES" value="true" />
     <property name="WebServerToolWindowFactoryState" value="false" />
     <property name="last_opened_file_path" value="$PROJECT_DIR$/scripts" />
     <property name="node.js.detected.package.eslint" value="true" />
@@ -30,6 +58,8 @@
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="$PROJECT_DIR$/scripts" />
+      <recent name="$PROJECT_DIR$/params" />
+      <recent name="$PROJECT_DIR$/launch" />
     </key>
   </component>
   <component name="RunDashboard">
@@ -98,12 +128,39 @@
       <workItem from="1564869672024" duration="3191000" />
       <workItem from="1564883568471" duration="32228000" />
       <workItem from="1564997060701" duration="1863000" />
-      <workItem from="1565059594162" duration="6361000" />
+      <workItem from="1565059594162" duration="12157000" />
+      <workItem from="1565175539093" duration="2119000" />
+      <workItem from="1565222849766" duration="26838000" />
+      <workItem from="1565506731197" duration="9172000" />
+      <workItem from="1565561790240" duration="5557000" />
+      <workItem from="1565600700289" duration="18345000" />
+      <workItem from="1565687761803" duration="1141000" />
+      <workItem from="1565715434582" duration="4094000" />
+      <workItem from="1565898268754" duration="2717000" />
+      <workItem from="1566030020652" duration="1284000" />
+      <workItem from="1566074609555" duration="1209000" />
+      <workItem from="1566163471435" duration="1200000" />
+      <workItem from="1566611321778" duration="7421000" />
+      <workItem from="1566641313696" duration="5085000" />
+      <workItem from="1566683243113" duration="22247000" />
     </task>
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="1" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State>
+              <option name="COLUMN_ORDER" />
+            </State>
+          </value>
+        </entry>
+      </map>
+    </option>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/nonlinear_mpc_casadi$randomtest.coverage" NAME="randomtest Coverage Results" MODIFIED="1564700488499" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/scripts" />

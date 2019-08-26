@@ -1,20 +1,20 @@
 # Parameter for MPC solver
-dT: 0.3 #unit: s
-mpc_steps_N: 15
-max_speed: 3.0 # unit: m/s
+dT: 0.1 #unit: s
+mpc_steps_N: 10
+max_speed: 2.25 # unit: m/s
 vehicle_L: 0.325 # distance between the front of the vehicle and its center of gravity
 ipopt_verbose: False
 mpc_ref_cte: 0.0
 mpc_ref_epsi: 0.0
-mpc_ref_vel: 3.0
+mpc_ref_vel: 2.0
 
-mpc_w_cte: 3500
-mpc_w_epsi: 3500
-mpc_w_vel: 8.0
-mpc_w_delta: 30
-mpc_w_accel: 8
-mpc_w_accel_d: 20
-mpc_w_delta_d: 40
+mpc_w_cte: 2000
+mpc_w_epsi: 2000
+mpc_w_vel: 5
+mpc_w_delta: 10
+mpc_w_accel: 20
+mpc_w_accel_d: 10
+mpc_w_delta_d: 50
 
 mpc_max_steering: 0.523 # Maximal steering radian (~30 deg)
 mpc_max_throttle: 1.0 # Maximal throttle accel
@@ -23,11 +23,11 @@ mpc_bound_value: 1.0e3 # Bound value for other variables
 # Parameters for control loop
 debug_mode: True
 delay_mode: False
-local_path_length: 1.75 # unit: m
+local_path_length: 2.0 # unit: m
 waypoints_fov: 2.09
 spline_poly_order: 3
 goal_threshold: 0.2 # unit: m
-controller_freq: 15
+controller_freq: 20
 
 #Frame names
 car_frame: base_link

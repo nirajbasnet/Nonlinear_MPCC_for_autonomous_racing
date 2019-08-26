@@ -6,16 +6,11 @@ import time
 import numpy as np
 
 import rospy
-import copy
 from geometry_msgs.msg import Pose, PoseStamped, Point, Quaternion, Twist
 from ackermann_msgs.msg import AckermannDriveStamped
 from nav_msgs.msg import Path, Odometry
 from std_msgs.msg import Duration, Header
 from tf.transformations import quaternion_from_euler, euler_from_quaternion
-
-
-# ideas
-# 1) send polynomial coefficients through P and formulate objective function with parameters P and x0. This way, there is no need to initialize optimization function everytime.
 
 class MPC:
     def __init__(self):
@@ -47,7 +42,7 @@ class MPC:
         self.lbx, self.ubx = None, None
         self.nlp = None
         self.solver = None
-        self.NDP = 4   #3 degree polynomial coefficients
+        self.NDP = 5   #3 degree polynomial coefficients
 
 
     def setup_MPC(self):
@@ -62,11 +57,8 @@ class MPC:
         x = SX.sym('x')
         y = SX.sym('y')
         psi = SX.sym('psi')
-        v = SX.sym('v')
-        cte = SX.sym('cte')
-        epsi = SX.sym('epsi')
 
-        a = SX.sym('a')
+        v = SX.sym('v')
         theta = SX.sym('theta')
 
         states = vertcat(x, y, psi)
@@ -86,8 +78,8 @@ class MPC:
 
         self.Q = SX.zeros(3, 3)
         self.Q[0, 0] = 0
-        self.Q[1, 1] = 30       #cross track error
-        self.Q[2, 2] = 30      # heading error. weighing matrices (states)
+        self.Q[1, 1] = 70       #cross track error
+        self.Q[2, 2] = 70      # heading error. weighing matrices (states)
 
         self.R = SX.zeros(2, 2)
         self.R[0, 0] = 5    #use of velocity control
@@ -248,17 +240,19 @@ class MPCKinematicNode:
                       'N': rospy.get_param('N', 30),
                       'L': rospy.get_param('vehicle_L', 0.325),
                       'theta_max': rospy.get_param('theta_max', 0.523),
-                      'v_max': rospy.get_param('v_max', 1.0),
+                      'v_max': rospy.get_param('v_max', 4.0),
                       'x_min': rospy.get_param('x_min', -30),
                       'x_max': rospy.get_param('x_max', 30),
-                      'y_min': rospy.get_param('y_min', -3),
-                      'y_max': rospy.get_param('y_max', 3),
+                      'y_min': rospy.get_param('y_min', -5),
+                      'y_max': rospy.get_param('y_max', 5),
                       'psi_min': rospy.get_param('psi_min', -3.14),
                       'psi_max': rospy.get_param('psi_max', 3.14),
-                      'ref_vel': rospy.get_param('mpc_ref_vel', 1.0)}
+                      'ref_vel': rospy.get_param('mpc_ref_vel', 1.5)}
+
         filename = rospy.get_param('~waypoints_filepath', '')
         self.LOCAL_PATHLENGTH = rospy.get_param('local_path_length', 4.0)
         self.WAYPOINT_FOV = rospy.get_param('waypoints_fov', 1.57)
+        self.CONTROLLER_FREQ = rospy.get_param('controller_freq', 20)
         self.GOAL_THRESHOLD = rospy.get_param('goal_threshold', 0.2)
         self.DEBUG_MODE = rospy.get_param('debug_mode', False)
         self.TWIST_PUB_MODE = rospy.get_param('pub_twist_cmd', False)
@@ -281,6 +275,12 @@ class MPCKinematicNode:
         self.local_path = Path()
         self.path_from_coeffs = Path()
 
+        self.current_time=0
+        self.t_plot = []
+        self.v_plot = []
+        self.steering_plot=[]
+        self.cte_plot=[]
+
         self.goal_pos = None
         self.goal_reached = False
         self.goal_received = False
@@ -295,10 +295,7 @@ class MPCKinematicNode:
         rospy.Subscriber(pose_topic, PoseStamped, self.pf_pose_callback, queue_size=1)
         rospy.Subscriber(goal_topic, PoseStamped, self.goalCB, queue_size=1)
         rospy.Subscriber(odom_topic, Odometry, self.odomCB, queue_size=1)
-        rospy.Timer(rospy.Duration(0.05), self.controlLoopCB)
-
-    def path_to_local_coord(self):
-        '''convert path to vehicle coordinate system'''
+        rospy.Timer(rospy.Duration(1.0/self.CONTROLLER_FREQ), self.controlLoopCB)
 
     def create_header(self, frame_id):
         header = Header()
@@ -360,6 +357,7 @@ class MPCKinematicNode:
                 self.goal_reached = True
                 self.goal_received = False
                 rospy.loginfo("Goal Reached !")
+                self.plot_data()
         # if self.DEBUG_MODE:
         #     print("Robot pose=",self.current_pose)
 
@@ -376,7 +374,7 @@ class MPCKinematicNode:
             print("Goal pos=", self.goal_pos)
 
     def publish_path_from_coeffs(self, coeffs):
-        x_coords = np.linspace(0., self.LOCAL_PATHLENGTH, int((self.LOCAL_PATHLENGTH - 0) / 0.1))
+        x_coords = np.linspace(-1.0, self.LOCAL_PATHLENGTH*2, int((self.LOCAL_PATHLENGTH*2 +1) / 0.1))
         self.path_from_coeffs.header = self.create_header(self.car_frame)
         self.path_from_coeffs.poses = []
         for x in x_coords:
@@ -423,25 +421,24 @@ class MPCKinematicNode:
 
             # Fit waypoints
 
-            self.mpc.coeffs = np.polyfit(x_veh, y_veh, 3)
+            self.mpc.coeffs = np.polyfit(x_veh, y_veh, self.mpc.NDP-1)
             if self.DEBUG_MODE:
                 print("poly coeffs=",self.mpc.coeffs)
             self.publish_path_from_coeffs(self.mpc.coeffs)
             print("Control loop time2=:", time.time() - control_loop_start_time)
-            # cte = self.polyeval(coeffs, 0.0)
-            # epsi = atan(coeffs[1])
+            cte = np.polyval(self.mpc.coeffs, 0.0)
+            # epsi = atan(self.mpc.coeffs[2])
 
             current_state= np.array([0.0,0.0,0.0])
 
-
-            print("Control loop time_mpc=:", time.time() - control_loop_start_time)
             # Solve MPC Problem
+            mpc_time=time.time()
             first_control,trajectory = self.mpc.solve(current_state)
-            print("Control loop time3=:", time.time() - control_loop_start_time)
+            print("Control loop time mpc=:", time.time() - mpc_time)
 
             # MPC result (all described in car frame)
-            steering = first_control[1] #radian
-            speed = first_control[0]   # speed
+            steering = float(first_control[1]) #radian
+            speed = float(first_control[0])   # speed
             if (speed >= self.param['v_max']):
                 speed = self.param['v_max']
             elif (speed <= (- self.param['v_max'] / 2.0)):
@@ -473,11 +470,15 @@ class MPCKinematicNode:
                 # print("mpc_speed: \n",mpc_results[2])
                 print("Control loop time=:",time.time()-control_loop_start_time)
 
+            self.current_time += 1.0 / self.CONTROLLER_FREQ
+            self.cte_plot.append(cte)
+            self.t_plot.append(self.current_time)
+            self.v_plot.append(speed)
+            self.steering_plot.append(np.rad2deg(steering))
+
         else:
             steering = 0.0
             speed = 0.0
-            if (self.goal_reached and self.goal_received):
-                print("Goal Reached !")
 
         # publish cmd
         ackermann_cmd = AckermannDriveStamped()
@@ -487,6 +488,7 @@ class MPCKinematicNode:
         # ackermann_cmd.drive.acceleration = throttle
         self.ackermann_pub.publish(ackermann_cmd)
 
+
         #
         # if self.TWIST_PUB_MODE:
         #     twist_msg = Twist()
@@ -494,6 +496,26 @@ class MPCKinematicNode:
         #     twist_msg.angular.z = steering
         #     self.twist_pub.publish(twist_msg)
 
+    def plot_data(self):
+        plt.figure(1)
+        plt.subplot(311)
+        plt.step(self.t_plot, self.v_plot, 'k', linewidth=1.5)
+        # plt.ylim(-0.2, 0.8)
+        plt.ylabel('v m/s')
+        plt.subplot(312)
+        plt.step(self.t_plot, self.steering_plot, 'r', linewidth=1.5)
+        # plt.ylim(-0.5, 1.0)
+        plt.ylabel('steering angle(degrees)')
+        plt.subplot(313)
+        plt.step(self.t_plot, self.cte_plot, 'g', linewidth=1.5)
+        # plt.ylim(-0.5, 1.0)
+        plt.ylabel('cte in m')
+        plt.show()
+
+        self.t_plot=[]
+        self.steering_plot=[]
+        self.v_plot=[]
+        self.current_time=0
 
 if __name__ == '__main__':
     mpc_node = MPCKinematicNode()
