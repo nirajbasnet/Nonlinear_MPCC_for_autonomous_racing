@@ -1,25 +1,23 @@
 <?xml version="1.0"?>
 <launch>
-
-<!--	This launch file uses the true x, y coordinates from Gazebo and maps it to /pf/viz/inferred_pose to insert into pure_pursuit code.-->
-  	<include file="$(find racecar_gazebo)/launch/racecar.launch">
+        <include file="$(find racecar_gazebo)/launch/racecar.launch">
 		  <arg name="world_name" value="track_empty"/>
-		  <arg name="x" default="20.56"/>  <!--20.56, d 1.18-->
-          <arg name="y" default="17.83"/>  <!--17.83,d 4.48 -->
+		  <arg name="x" default="28.05"/>  <!--28.05, p 8.09,-->
+          <arg name="y" default="25.94"/>  <!--25.94,p 6.26 -->
           <arg name="z" default="0.0"/>
-          <arg name="yaw" default="0.9125"/>  <!--0.9125,d -2.59-->
+          <arg name="yaw" default="0.807"/>  <!--0.807,p 3.14-->
   	</include>
-  
+
   	<!-- Run map server -->
-	<arg name="map_file" default="$(find nonlinear_mpc_casadi)/maps/kelley_third_floor.yaml"/>
+	<arg name="map_file" default="$(find nonlinear_mpc_casadi)/maps/kelley_third_floor.yaml"/> <!--map_trackporto.yaml-->
 	<node name="map_server" pkg="map_server" type="map_server" args="$(arg map_file)" />
 
-    <node pkg="nonlinear_mpc_casadi" name="remap_gazebo_pose_node" type="remap_gazebo_pose.py" output="screen" />
+        <node pkg="nonlinear_mpc_casadi" name="remap_gazebo_pose_node" type="remap_gazebo_pose.py" output="screen" />
   	<node pkg="nonlinear_mpc_casadi" name="sim_connector_node" type="sim_connector.py" output="screen"/>
-    <node pkg="nonlinear_mpc_casadi" name="visualizer" type="visualize_markers.py"/>
+   
 
   	<!--  ************** Visualisation **************  -->
-	<node name="rviz" pkg="rviz" type="rviz" args="-d $(find nonlinear_mpc_casadi)/rviz/mpc_gazebo_navigation.rviz"/>
+	<node name="rviz" pkg="rviz" type="rviz" args="-d $(find nonlinear_mpc_casadi)/rviz/racetrack_rviz.rviz"/>
 
 
 </launch>

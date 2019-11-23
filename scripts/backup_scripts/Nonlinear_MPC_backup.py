@@ -97,15 +97,14 @@ class MPC:
         self.X = MX.sym('X', self.n_states, (self.N + 1))
         # A vector that represents the states over the optimization problem
 
-        self.Q = MX.zeros(3, 3)
+        self.Q = MX.zeros(2, 2)
         self.Q[0, 0] = self.param['mpc_w_cte']  # cross track error
         self.Q[1, 1] = self.param['mpc_w_lag']  # lag error
-        self.Q[2,2] = self.param['mpc_w_epsi']
 
         self.R = MX.zeros(3, 3)
         self.R[0, 0] = self.param['mpc_w_vel']  # use of velocity control
         self.R[1, 1] = self.param['mpc_w_delta']  # use of steering actuator.  weighing matrices (controls)
-        self.R[2, 2] = 0  # projected velocity input for progress along the track
+        self.R[2, 2] = self.param['mpc_w_p']  # projected velocity input for progress along the track
 
         self.S = MX.zeros(3, 3)
         self.S[0, 0] = self.param['mpc_w_accel']  # change in velocity i.e, acceleration
@@ -170,7 +169,7 @@ class MPC:
             ref_x, ref_y = self.center_lut_x(st_next[3]), self.center_lut_y(st_next[3])
             e_c = sin(t_angle) * (st_next[0] - ref_x) - cos(t_angle) * (st_next[1] - ref_y)
             e_l = -cos(t_angle) * (st_next[0] - ref_x) - sin(t_angle) * (st_next[1] - ref_y)
-            error = vertcat(e_c, e_l,st_next[2]-t_angle)
+            error = vertcat(e_c, e_l)
 
             self.obj = self.obj + mtimes(mtimes(error.T, self.Q), error) + mtimes(
                 mtimes((con - self.P[self.n_states+2*self.N+4*self.N_OBST+self.n_controls*k:self.n_states+2*self.N+4*self.N_OBST+self.n_controls*(k+1)]).T,
@@ -178,17 +177,10 @@ class MPC:
                 (con - self.P[self.n_states+2*self.N+4*self.N_OBST+self.n_controls*k:self.n_states+2*self.N+4*self.N_OBST+self.n_controls*(k+1)]))
             if k < self.N - 1:
                 con_next = self.U[:, k + 1]
-                self.obj += mtimes(mtimes((con_next - con).T, self.S), (con_next - con))-self.param['mpc_w_p']*con_next[2]
+                self.obj += mtimes(mtimes((con_next - con).T, self.S), (con_next - con))
 
             f_value = self.f(st, con)
             st_next_euler = st + (self.dT * f_value)
-
-            # k1= self.f(st,con)
-            # k2= self.f(st+self.dT/2*k1,con)
-            # k3= self.f(st+self.dT/2*k2,con)
-            # k4 = self.f(st + self.dT * k3, con)
-            # st_next_euler = st+ self.dT/6*(k1+2*k2+2*k3+k4)
-
             self.g = vertcat(self.g, st_next - st_next_euler)  # compute constraints
 
             # path boundary constraints
@@ -378,7 +370,6 @@ class MPCKinematicNode:
                       'mpc_w_cte': rospy.get_param('mpc_w_cte', 750),
                       'mpc_w_s': rospy.get_param('mpc_w_s', 0),
                       'mpc_w_lag': rospy.get_param('mpc_w_lag', 750),
-                      'mpc_w_epsi': rospy.get_param('mpc_w_epsi', 400),
                       'mpc_w_vel': rospy.get_param('mpc_w_vel',0.75),
                       'mpc_w_delta': rospy.get_param('mpc_w_delta', 50),
                       'mpc_w_p': rospy.get_param('mpc_w_p', 5),  # 1
@@ -785,7 +776,6 @@ class MPCKinematicNode:
         ackermann_cmd = AckermannDriveStamped()
         ackermann_cmd.header = self.create_header(self.car_frame)
         ackermann_cmd.drive.steering_angle = steering
-        self.steering_angle=steering
         ackermann_cmd.drive.speed = speed
         # ackermann_cmd.drive.acceleration = throttle
         self.ackermann_pub.publish(ackermann_cmd)

@@ -3,17 +3,16 @@ from casadi import *
 from scipy.interpolate import splprep, splev
 import matplotlib.pyplot as plt
 import csv
-import os
 import time
 import numpy as np
 
 import rospy
-from geometry_msgs.msg import Pose, PoseStamped, Point, Quaternion,Vector3
+from geometry_msgs.msg import Pose, PoseStamped, Point, Quaternion, Vector3
 from ackermann_msgs.msg import AckermannDriveStamped
 from nav_msgs.msg import Path, Odometry
-from std_msgs.msg import Duration, Header,ColorRGBA
+from std_msgs.msg import Duration, Header, ColorRGBA
 from tf.transformations import quaternion_from_euler, euler_from_quaternion
-from visualization_msgs.msg import Marker,MarkerArray
+from visualization_msgs.msg import Marker, MarkerArray
 
 
 class MPC:
@@ -29,6 +28,8 @@ class MPC:
         self.p_min = 0
         self.p_max = 0.6
         self.x_min, self.x_max, self.y_min, self.y_max, self.psi_min, self.psi_max = None, None, None, None, None, None
+        self.d_v_min, self.d_theta_min, self.d_p_min = None,None,None
+        self.d_v_max, self.d_theta_max, self.d_p_max = None,None,None
         self.n_states, self.n_controls, self.T_V = None, None, None
         self.f = None
         self.U = None
@@ -57,10 +58,10 @@ class MPC:
         self.right_lut_x, self.right_lut_y = None, None
         self.left_lut_x, self.left_lut_y = None, None
         self.element_arc_lengths = None
-        self.arc_lengths_orig_l= None
+        self.arc_lengths_orig_l = None
 
         self.WARM_START = False
-        self.p_initial = 2.75      #projected centerline vel can set to desired value for initial estimation
+        self.p_initial = 2.75  # projected centerline vel can set to desired value for initial estimation
 
         self.boundary_pub = None
 
@@ -91,21 +92,21 @@ class MPC:
         self.f = Function('f', [states, controls], [rhs])  # nonlinear mapping function f(x,u)
         self.U = MX.sym('U', self.n_controls, self.N)
 
-        self.P = MX.sym('P',self.n_states+ 2*self.N+4*self.N_OBST+ self.N *self.n_controls)
+        self.P = MX.sym('P', self.n_states + 2 * self.N + 4 * self.N_OBST + self.N * self.n_controls)
         # parameters (which include the nth degree polynomial coefficients, initial state and the reference along the predicted trajectory (reference states and reference controls))
 
         self.X = MX.sym('X', self.n_states, (self.N + 1))
         # A vector that represents the states over the optimization problem
 
-        self.Q = MX.zeros(3, 3)
+        self.Q = MX.zeros(2, 2)
         self.Q[0, 0] = self.param['mpc_w_cte']  # cross track error
         self.Q[1, 1] = self.param['mpc_w_lag']  # lag error
-        self.Q[2,2] = self.param['mpc_w_epsi']
-
+        # self.Q[2, 2] = self.param['mpc_w_epsi']  # heading error. weighing matrices (states)
+        # self.Q[3, 3] = self.param['mpc_w_s']
         self.R = MX.zeros(3, 3)
         self.R[0, 0] = self.param['mpc_w_vel']  # use of velocity control
         self.R[1, 1] = self.param['mpc_w_delta']  # use of steering actuator.  weighing matrices (controls)
-        self.R[2, 2] = 0  # projected velocity input for progress along the track
+        self.R[2, 2] = self.param['mpc_w_p']  # projected velocity input for progress along the track
 
         self.S = MX.zeros(3, 3)
         self.S[0, 0] = self.param['mpc_w_accel']  # change in velocity i.e, acceleration
@@ -121,19 +122,20 @@ class MPC:
         self.dT = param['dT']
         self.N = param['N']
         self.L = param['L']
+        self.d_v_min, self.d_theta_min, self.d_p_min = -param['d_v_bound'],-param['d_theta_bound'],-param['d_p_bound']
+        self.d_v_max, self.d_theta_max, self.d_p_max = param['d_v_bound'],param['d_theta_bound'],param['d_p_bound']
         self.theta_max, self.v_max = param['theta_max'], param['v_max']
-        self.p_initial = self.v_max
         self.theta_min = -self.theta_max
         self.v_min = -self.v_max
         self.x_min, self.x_max = param['x_min'], param['x_max']
         self.y_min, self.y_max = param['y_min'], param['y_max']
         self.psi_min, self.psi_max = param['psi_min'], param['psi_max']
-        self.s_min, self.s_max = param['s_min'], param['s_max']
+        self.s_min, self.s_max = param['s_min'], param['s_max'] * 2
         self.p_min, self.p_max = param['p_min'], param['p_max']
         self.NDP = int(self.param['spline_poly_order']) + 1
         print self.param
 
-    def set_track_data(self, c_x, c_y, c_dx, c_dy, r_x, r_y, l_x, l_y, element_arc_lengths,original_arc_length_total):
+    def set_track_data(self, c_x, c_y, c_dx, c_dy, r_x, r_y, l_x, l_y, element_arc_lengths, original_arc_length_total):
         self.center_lut_x, self.center_lut_y = c_x, c_y
         self.center_lut_dx, self.center_lut_dy = c_dx, c_dy
         self.right_lut_x, self.right_lut_y = r_x, r_y
@@ -163,6 +165,7 @@ class MPC:
             st = self.X[:, k]
             st_next = self.X[:, k + 1]
             con = self.U[:, k]
+
             # st[3] = mod(st[3], self.element_arc_lengths[-1])
             # st_next[3]= mod(st_next[3], self.element_arc_lengths[-1])
             dx, dy = self.center_lut_dx(st_next[3]), self.center_lut_dy(st_next[3])
@@ -170,37 +173,35 @@ class MPC:
             ref_x, ref_y = self.center_lut_x(st_next[3]), self.center_lut_y(st_next[3])
             e_c = sin(t_angle) * (st_next[0] - ref_x) - cos(t_angle) * (st_next[1] - ref_y)
             e_l = -cos(t_angle) * (st_next[0] - ref_x) - sin(t_angle) * (st_next[1] - ref_y)
-            error = vertcat(e_c, e_l,st_next[2]-t_angle)
+            error = vertcat(e_c, e_l)
 
-            self.obj = self.obj + mtimes(mtimes(error.T, self.Q), error) + mtimes(
-                mtimes((con - self.P[self.n_states+2*self.N+4*self.N_OBST+self.n_controls*k:self.n_states+2*self.N+4*self.N_OBST+self.n_controls*(k+1)]).T,
-                       self.R),
-                (con - self.P[self.n_states+2*self.N+4*self.N_OBST+self.n_controls*k:self.n_states+2*self.N+4*self.N_OBST+self.n_controls*(k+1)]))
+            self.obj = self.obj + mtimes(mtimes(error.T, self.Q), error) - self.param['mpc_w_p'] * con[2] + self.param[
+                'mpc_w_delta'] * con[1] * con[1]
             if k < self.N - 1:
                 con_next = self.U[:, k + 1]
-                self.obj += mtimes(mtimes((con_next - con).T, self.S), (con_next - con))-self.param['mpc_w_p']*con_next[2]
+                self.obj += mtimes(mtimes((con_next - con).T, self.S), (con_next - con))
 
             f_value = self.f(st, con)
             st_next_euler = st + (self.dT * f_value)
-
-            # k1= self.f(st,con)
-            # k2= self.f(st+self.dT/2*k1,con)
-            # k3= self.f(st+self.dT/2*k2,con)
-            # k4 = self.f(st + self.dT * k3, con)
-            # st_next_euler = st+ self.dT/6*(k1+2*k2+2*k3+k4)
-
             self.g = vertcat(self.g, st_next - st_next_euler)  # compute constraints
 
             # path boundary constraints
-            self.g=vertcat(self.g,self.P[self.n_states+2*k]*st_next[0]-self.P[self.n_states+2*k+1]*st_next[1])   #LB<=ax-by<=UB  --represents half space planes
+            self.g = vertcat(self.g,
+                             self.P[self.n_states + 2 * k] * st_next[0] - self.P[self.n_states + 2 * k + 1] * st_next[
+                                 1])  # LB<=ax-by<=UB  --represents half space planes
+
+            # print error, self.obj, self.g
+            # input('str')
 
             # Obstacle avoidance constraints
-            #should include [pos_x,pos_y,velocity(ob_vel),orientation(ob_theta)]
+            # should include [pos_x,pos_y,velocity(ob_vel),orientation(ob_theta)]
             # obs_x = 0.5
             # obs_y = 0.5
             # obs_diam = 0.3
             # rob_diam = 0.3
             # self.g = vertcat(self.g,-sqrt((st[0] - obs_x)** 2 + (st[1] - obs_y) ** 2) + (rob_diam / 2 + obs_diam / 2))
+        for k in range(self.N - 1):
+            self.g = vertcat(self.g, self.U[:, k + 1] - self.U[:, k])
 
     def init_ipopt_solver(self):
         # Optimization variables(States+controls) across the prediction horizon
@@ -208,9 +209,10 @@ class MPC:
                                 reshape(self.U, self.n_controls * self.N, 1))
         self.opts["ipopt"] = {}
         self.opts["ipopt"]["max_iter"] = 2000
-        self.opts["ipopt"]["print_level"] =0
+        self.opts["ipopt"]["print_level"] = 0
         self.opts["verbose"] = self.param['ipopt_verbose']
-        self.opts["jit"]=True
+        # self.opts["expand"] = True    #Error- 'eval_sx' not defined for BSplineInterpolant
+        self.opts["jit"] = True
         self.opts["print_time"] = 0
         self.opts["ipopt"]["acceptable_tol"] = 1e-8
         self.opts["ipopt"]["acceptable_obj_change_tol"] = 1e-6
@@ -222,11 +224,22 @@ class MPC:
 
     def init_constraints(self):
         '''Initialize constraints for states, dynamic model state transitions and control inputs of the system'''
-        self.lbg = np.zeros((self.n_states * (self.N + 1)+self.N, 1))
-        self.ubg = np.zeros((self.n_states * (self.N + 1)+self.N, 1))
+
+        self.lbg = np.zeros((self.n_states * (self.N + 1) + self.N + self.n_controls * (self.N - 1), 1))
+        self.ubg = np.zeros((self.n_states * (self.N + 1) + self.N + self.n_controls * (self.N - 1), 1))
+
+        for k in range(self.N - 1):
+            self.lbg[self.n_states * (self.N + 1) + self.N + self.n_controls * k:self.n_states * (
+                        self.N + 1) + self.N + self.n_controls * (k + 1)] = np.array(
+                [[self.d_v_min, self.d_theta_min, self.d_p_min]])
+            self.ubg[self.n_states * (self.N + 1) + self.N + self.n_controls * k:self.n_states * (
+                    self.N + 1) + self.N + self.n_controls * (k + 1)] = np.array(
+                [[self.d_v_max, self.d_theta_max, self.d_p_max]])
+
         self.lbx = np.zeros((self.n_states + (self.n_states + self.n_controls) * self.N, 1))
         self.ubx = np.zeros((self.n_states + (self.n_states + self.n_controls) * self.N, 1))
         # Upper and lower bounds for the state optimization variables
+
         for k in range(self.N + 1):
             self.lbx[self.n_states * k:self.n_states * (k + 1), 0] = np.array(
                 [[self.x_min, self.y_min, self.psi_min, self.s_min]])
@@ -243,74 +256,84 @@ class MPC:
 
     def init_mpc_start_conditions(self):
         self.u0 = np.zeros((self.N, self.n_controls))
-        self.X0 = np.zeros((self.N + 1,self.n_states))
+        self.X0 = np.zeros((self.N + 1, self.n_states))
 
-    def get_angle_at_centerline(self,s):
+    def get_angle_at_centerline(self, s):
         dx, dy = self.center_lut_dx(s), self.center_lut_dy(s)
         return np.arctan2(dy, dx)
 
-    def get_point_at_centerline(self,s):
+    def get_point_at_centerline(self, s):
         return self.center_lut_x(s), self.center_lut_y(s)
 
-    def get_path_constraints_points(self,prev_soln):
+    def get_path_constraints_points(self, prev_soln):
         right_points = np.zeros((self.N, 2))
         left_points = np.zeros((self.N, 2))
-        for k in range(1,self.N+1):
-            right_points[k-1,:] = [self.right_lut_x(prev_soln[k,3]), self.right_lut_y(prev_soln[k,3])]  # Right boundary
-            left_points[k-1,:] = [self.left_lut_x(prev_soln[k,3]), self.left_lut_y(prev_soln[k,3])]  # Left boundary
-        return right_points,left_points
+        for k in range(1, self.N + 1):
+            right_points[k - 1, :] = [self.right_lut_x(prev_soln[k, 3]),
+                                      self.right_lut_y(prev_soln[k, 3])]  # Right boundary
+            left_points[k - 1, :] = [self.left_lut_x(prev_soln[k, 3]),
+                                     self.left_lut_y(prev_soln[k, 3])]  # Left boundary
+        return right_points, left_points
 
-    def construct_warm_start_soln(self,initial_state):
-        #Construct an initial estimated solution to warm start the optimization problem with valid path constraints
-        if initial_state[3]>=self.arc_lengths_orig_l:
-             initial_state[3] -= self.arc_lengths_orig_l
-        initial_state[2] = self.get_angle_at_centerline(initial_state[3])
-        self.X0[0,:] = initial_state
-        for k in range(1,self.N+1):
-            s_next = self.X0[k-1,3] + self.p_initial*self.dT
+    def construct_warm_start_soln(self, initial_state):
+        # Construct an initial estimated solution to warm start the optimization problem with valid path constraints
+        s_now = initial_state[3]
+        initial_state[2] = self.get_angle_at_centerline(s_now)
+        self.X0[0, :] = initial_state
+        for k in range(1, self.N + 1):
+            s_next = self.X0[k - 1, 3] + self.p_initial * self.dT
             psi_next = self.get_angle_at_centerline(s_next)
-            x_next,y_next = self.get_point_at_centerline(s_next)
-            self.X0[k,:]=[x_next,y_next,psi_next,s_next]
+            x_next, y_next = self.get_point_at_centerline(s_next)
+            self.X0[k, :] = [x_next, y_next, psi_next, s_next]
 
-    def filter_estimate(self,initial_arc_pos):
-        if (self.X0[0,3] >= self.arc_lengths_orig_l) and (initial_arc_pos>=self.arc_lengths_orig_l or initial_arc_pos<=5):
-            self.X0[:,3]=self.X0[:,3]-self.arc_lengths_orig_l
-        if initial_arc_pos>=self.arc_lengths_orig_l:
-            initial_arc_pos -= self.arc_lengths_orig_l
-        return initial_arc_pos
+    def filter_estimate(self, initial_s):
+        # print self.X0
+        if self.X0[0, 3] > self.arc_lengths_orig_l:
+            # print "Not ADjusted", self.X0
+            self.X0[:, 3] = self.X0[:, 3] - self.arc_lengths_orig_l
+            # print "ADjusted",self.X0
+            # print initial_s
 
     def solve(self, initial_state):
-        p = np.zeros( self.n_states+2*self.N+4*self.N_OBST+ self.N *self.n_controls)
-        if self.X0[0,2]-initial_state[2] >=np.pi:
-            initial_state[2]=initial_state[2]+2*np.pi
-        elif self.X0[0, 2] - initial_state[2] <= -np.pi:
+        p = np.zeros(self.n_states + 2 * self.N + 4 * self.N_OBST + self.N * self.n_controls)
+        if initial_state[3] > self.arc_lengths_orig_l:
+            initial_state[3] = initial_state[3] - self.arc_lengths_orig_l
+        if self.X0[0, 2] - initial_state[2] > np.pi:
+            initial_state[2] = initial_state[2] + 2 * np.pi
+        elif self.X0[0, 2] - initial_state[2] < -np.pi:
             initial_state[2] = initial_state[2] - 2 * np.pi
+
         if not self.WARM_START:
             rospy.loginfo("Warm start started")
             self.construct_warm_start_soln(initial_state)
             rospy.loginfo("Warm start accomplished")
-        initial_state[3]=self.filter_estimate(initial_state[3])
+        # print self.X0
+        self.filter_estimate(initial_state[3])
+        initial_state[3] = self.X0[0, 3]
         p[0:self.n_states] = initial_state  # initial condition of the robot posture
-
         right_points, left_points = self.get_path_constraints_points(self.X0)
-        self.publish_boundary_markers(right_points,left_points)
+        self.publish_boundary_markers(right_points, left_points)
 
-        for k in range(self.N):  #set the reference controls and path boundary conditions to track
-            delta_x_path = right_points[k,0]-left_points[k,0]
-            delta_y_path = right_points[k,1]-left_points[k,1]
-            p[self.n_states+2*k:self.n_states+2*k+2]=[-delta_x_path,delta_y_path]
-            up_bound= max(-delta_x_path*right_points[k,0]-delta_y_path*right_points[k,1],-delta_x_path*left_points[k,0]-delta_y_path*left_points[k,1])
-            low_bound = min(-delta_x_path*right_points[k,0]-delta_y_path*right_points[k,1],-delta_x_path*left_points[k,0]-delta_y_path*left_points[k,1])
-            self.lbg[self.n_states-1+(self.n_states+1)*(k+1),0]=low_bound
-            self.ubg[self.n_states - 1 + (self.n_states + 1) * (k + 1),0] = up_bound
+        for k in range(self.N):  # set the reference controls and path boundary conditions to track
+            delta_x_path = right_points[k, 0] - left_points[k, 0]
+            delta_y_path = right_points[k, 1] - left_points[k, 1]
+            p[self.n_states + 2 * k:self.n_states + 2 * k + 2] = [-delta_x_path, delta_y_path]
+            up_bound = max(-delta_x_path * right_points[k, 0] - delta_y_path * right_points[k, 1],
+                           -delta_x_path * left_points[k, 0] - delta_y_path * left_points[k, 1])
+            low_bound = min(-delta_x_path * right_points[k, 0] - delta_y_path * right_points[k, 1],
+                            -delta_x_path * left_points[k, 0] - delta_y_path * left_points[k, 1])
+            self.lbg[self.n_states - 1 + (self.n_states + 1) * (k + 1), 0] = low_bound
+            self.ubg[self.n_states - 1 + (self.n_states + 1) * (k + 1), 0] = up_bound
 
-            #obstacle parameters
+            # obstacle parameters
 
-            #Control parameters
+            # Control parameters
             v_ref = self.param['ref_vel']
             p_ref = self.param['p_max']
             theta_ref = 0
-            p[self.n_states+2*self.N+4*self.N_OBST+self.n_controls*k:self.n_states+2*self.N+4*self.N_OBST+self.n_controls*(k+1)] = [v_ref,theta_ref, p_ref]
+            p[
+            self.n_states + 2 * self.N + 4 * self.N_OBST + self.n_controls * k:self.n_states + 2 * self.N + 4 * self.N_OBST + self.n_controls * (
+                        k + 1)] = [v_ref, theta_ref, p_ref]
 
         # Initial value of the optimization variables
         x_init = vertcat(reshape(self.X0.T, self.n_states * (self.N + 1), 1),
@@ -324,45 +347,51 @@ class MPC:
         con_first = u[0, :].T
         trajectory = self.X0.full()  # size is (N+1,n_states)
         # full converts casadi data type to python data type(numpy array)
+        # print self.X0
+        # print u
+        # input('str')
+
         # Shift trajectory and control solution to initialize the next step
         self.X0 = vertcat(self.X0[1:, :], self.X0[self.X0.size1() - 1, :])
         self.u0 = vertcat(u[1:, :], u[u.size1() - 1, :])
-        return con_first, trajectory ,u
+        return con_first, trajectory
 
     def heading(self, yaw):
         q = quaternion_from_euler(0, 0, yaw)
         return Quaternion(*q)
 
-    def publish_boundary_markers(self,right_points,left_points):
+    def publish_boundary_markers(self, right_points, left_points):
         boundary_array = MarkerArray()
-        combined_points = np.row_stack((right_points,left_points))
+        combined_points = np.row_stack((right_points, left_points))
         delta = right_points - left_points
-        angles= np.arctan2(delta[:,0],-delta[:,1])
+        angles = np.arctan2(delta[:, 0], -delta[:, 1])
+
         for i in range(combined_points.shape[0]):
             path_marker = Marker()
             path_marker.header.frame_id = "map"
             path_marker.id = i
             path_marker.type = path_marker.ARROW
             path_marker.action = path_marker.ADD
-            path_marker.scale= Vector3(0.25,0.05,0.05)
-            path_marker.color = ColorRGBA(0.0,0.0,1.0,0.8)
-            path_marker.pose.orientation = self.heading(angles[i%right_points.shape[0]])
-            path_marker.pose.position= Point(float(combined_points[i,0]),float(combined_points[i,1]),0.0)
+            path_marker.scale = Vector3(0.25, 0.05, 0.05)
+            path_marker.color = ColorRGBA(0.0, 0.0, 1.0, 0.8)
+            path_marker.pose.orientation = self.heading(angles[i % right_points.shape[0]])
+            path_marker.pose.position = Point(float(combined_points[i, 0]), float(combined_points[i, 1]), 0.0)
             boundary_array.markers.append(path_marker)
         self.boundary_pub.publish(boundary_array)
+
 
 ########################################################################################################################
 ########################################################################################################################
 class MPCKinematicNode:
     def __init__(self):
         rospy.init_node('mpc_node')
-        self.param = {'dT': rospy.get_param('dT', 0.2),
-                      'N': rospy.get_param('mpc_steps_N', 20),
+        self.param = {'dT': rospy.get_param('dT', 0.25),
+                      'N': rospy.get_param('mpc_steps_N', 18),
                       'L': rospy.get_param('vehicle_L', 0.325),
                       'theta_max': rospy.get_param('mpc_max_steering', 0.523),
-                      'v_max': rospy.get_param('max_speed', 2.0),  # 5
+                      'v_max': rospy.get_param('max_speed', 6.0),  # 5
                       'p_min': rospy.get_param('p_min', 0),
-                      'p_max': rospy.get_param('p_max', 3.0),
+                      'p_max': rospy.get_param('p_max', 6.0),
                       'x_min': rospy.get_param('x_min', -200),
                       'x_max': rospy.get_param('x_max', 200),
                       'y_min': rospy.get_param('y_min', -200),
@@ -374,32 +403,32 @@ class MPCKinematicNode:
                       'd_v_bound': rospy.get_param('d_v_bound', 2.0),
                       'd_theta_bound': rospy.get_param('d_theta_bound', 0.5),
                       'd_p_bound': rospy.get_param('d_p_bound', 2.0),
-                      'ref_vel': rospy.get_param('mpc_ref_vel', 2.0),
-                      'mpc_w_cte': rospy.get_param('mpc_w_cte', 750),
+                      'ref_vel': rospy.get_param('mpc_ref_vel', 2.5),
+                      'mpc_w_cte': rospy.get_param('mpc_w_cte', 1000),  # 500
+                      'mpc_w_epsi': rospy.get_param('mpc_w_epsi', 50),
                       'mpc_w_s': rospy.get_param('mpc_w_s', 0),
-                      'mpc_w_lag': rospy.get_param('mpc_w_lag', 750),
-                      'mpc_w_epsi': rospy.get_param('mpc_w_epsi', 400),
-                      'mpc_w_vel': rospy.get_param('mpc_w_vel',0.75),
+                      'mpc_w_lag': rospy.get_param('mpc_w_lag', 1000),  # 1000
+                      'mpc_w_vel': rospy.get_param('mpc_w_vel', 0.05),
                       'mpc_w_delta': rospy.get_param('mpc_w_delta', 50),
-                      'mpc_w_p': rospy.get_param('mpc_w_p', 5),  # 1
+                      'mpc_w_p': rospy.get_param('mpc_w_p', 0.75),  # 1
                       'mpc_w_accel': rospy.get_param('mpc_w_accel', 4),
-                      'mpc_w_delta_d': rospy.get_param('mpc_w_delta_d', 750),
+                      'mpc_w_delta_d': rospy.get_param('mpc_w_delta_d', 1300),  # 600
                       'mpc_w_delta_p': rospy.get_param('mpc_w_delta_p', 0),
                       'spline_poly_order': rospy.get_param('spline_poly_order', 3),
                       'ipopt_verbose': rospy.get_param('ipopt_verbose', True)
                       }
-        dirname = os.path.dirname(__file__)
-        path_folder_name = rospy.get_param('path_folder_name','kelley')
-        self.CENTER_TRACK_FILENAME = os.path.join(dirname, path_folder_name + '/centerline_waypoints.csv')
-        self.CENTER_DERIVATIVE_FILENAME = os.path.join(dirname,path_folder_name + '/center_spline_derivatives.csv')
-        self.RIGHT_TRACK_FILENAME = os.path.join(dirname, path_folder_name + '/right_waypoints.csv')
-        self.LEFT_TRACK_FILENAME = os.path.join(dirname, path_folder_name + '/left_waypoints.csv')
-        self.CONTROLLER_FREQ = rospy.get_param('controller_freq', 20)
-        self.GOAL_THRESHOLD = rospy.get_param('goal_threshold', 0.75)
-        self.CAR_WIDTH = rospy.get_param('car_width',0.30)
-        self.INFLATION_FACTOR = rospy.get_param('inflation_factor',0.75)
-        self.LAG_TIME = rospy.get_param('lag_time',0.1)  #100ms
 
+        filename = rospy.get_param('~waypoints_filepath', '')
+        path_folder_name = './porto/'
+        self.CENTER_TRACK_FILENAME = rospy.get_param('center_track_filpath', path_folder_name+'centerline_waypoints.csv')
+        self.CENTER_DERIVATIVE_FILENAME = rospy.get_param('center_derivative_filpath',
+                                                          path_folder_name+'center_spline_derivatives.csv')
+        self.RIGHT_TRACK_FILENAME = rospy.get_param('right_track_filpath', path_folder_name+'right_waypoints.csv')
+        self.LEFT_TRACK_FILENAME = rospy.get_param('left_track_filpath', path_folder_name+'left_waypoints.csv')
+        self.LOCAL_PATHLENGTH = rospy.get_param('local_path_length', 4.0)
+        self.WAYPOINT_FOV = rospy.get_param('waypoints_fov', 1.57)
+        self.CONTROLLER_FREQ = rospy.get_param('controller_freq', 20)
+        self.GOAL_THRESHOLD = rospy.get_param('goal_threshold', 1.0)
         self.DEBUG_MODE = rospy.get_param('debug_mode', True)
         self.DELAY_MODE = rospy.get_param('delay_mode', True)
         # Topic name related parameters
@@ -452,7 +481,7 @@ class MPCKinematicNode:
         self.current_pos_x, self.current_pos_y, self.current_yaw, self.current_s = 0.0, 0.0, 0.0, 0.0
         self.current_pose = None
         self.current_vel_odom = 0.0
-        self.projected_vel=0.0
+        self.projected_vel = 0.0
         self.steering_angle = 0.0
         # Goal status related variables
         self.goal_pos = None
@@ -472,7 +501,7 @@ class MPCKinematicNode:
         self.mpc.set_initial_params(self.param)
         self.mpc.set_track_data(self.center_lut_x, self.center_lut_y, self.center_lut_dx, self.center_lut_dy,
                                 self.right_lut_x, self.right_lut_y, self.left_lut_x, self.left_lut_y,
-                                self.element_arc_lengths,self.element_arc_lengths_orig[-1])
+                                self.element_arc_lengths, self.element_arc_lengths_orig[-1])
         self.mpc.setup_MPC()
 
     def create_header(self, frame_id):
@@ -550,7 +579,7 @@ class MPCKinematicNode:
             if dist2goal < self.GOAL_THRESHOLD:
                 self.goal_reached = True
                 self.goal_received = False
-                self.mpc.WARM_START=False
+                self.mpc.WARM_START = False
                 self.mpc.init_mpc_start_conditions()
                 rospy.loginfo("Goal Reached !")
                 self.plot_data()
@@ -615,17 +644,9 @@ class MPCKinematicNode:
         d = np.diff(waypoints, axis=0)
         consecutive_diff = np.sqrt(np.sum(np.power(d, 2), axis=1))
         dists_cum = np.cumsum(consecutive_diff)
+        print np.where(consecutive_diff == 0)[0]
         dists_cum = np.insert(dists_cum, 0, 0.0)
         return dists_cum
-
-    def inflate_track_boundaries(self,center_lane,side_lane,car_width=0.325,inflation_factor=1.2):
-        for idx in range(len(center_lane)):
-            lane_vector = side_lane[idx,:] - center_lane[idx,:]
-            side_track_width = np.linalg.norm(lane_vector)
-            side_unit_vector= lane_vector / side_track_width
-            side_lane[idx,:] = center_lane[idx,:]+side_unit_vector*(side_track_width-car_width*inflation_factor)
-        return side_lane
-
 
     def preprocess_track_data(self):
         center_lane = self.read_waypoints_array_from_csv(self.CENTER_TRACK_FILENAME)
@@ -633,19 +654,17 @@ class MPCKinematicNode:
         right_lane = self.read_waypoints_array_from_csv(self.RIGHT_TRACK_FILENAME)
         left_lane = self.read_waypoints_array_from_csv(self.LEFT_TRACK_FILENAME)
 
-        right_lane = self.inflate_track_boundaries(center_lane,right_lane,self.CAR_WIDTH,self.INFLATION_FACTOR)
-        left_lane = self.inflate_track_boundaries(center_lane, left_lane, self.CAR_WIDTH, self.INFLATION_FACTOR)
-
-
-        self.center_lane = np.row_stack((center_lane,center_lane[1:int(center_lane.shape[0]/2),:]))
+        self.center_lane = np.row_stack((center_lane, center_lane[1:int(center_lane.shape[0] / 2), :]))
         right_lane = np.row_stack((right_lane, right_lane[1:int(center_lane.shape[0] / 2), :]))
         left_lane = np.row_stack((left_lane, left_lane[1:int(center_lane.shape[0] / 2), :]))
-        center_derivative_data = np.row_stack((center_derivative_data, center_derivative_data[1:int(center_lane.shape[0] / 2), :]))
+        center_derivative_data = np.row_stack(
+            (center_derivative_data, center_derivative_data[1:int(center_lane.shape[0] / 2), :]))
         # print self.center_lane.shape,right_lane.shape,left_lane.shape,center_derivative_data
 
         # Interpolate center line upto desired resolution
         self.element_arc_lengths_orig = self.get_arc_lengths(center_lane)
         self.element_arc_lengths = self.get_arc_lengths(self.center_lane)
+        print self.element_arc_lengths
         self.center_lut_x, self.center_lut_y = self.get_interpolated_path_casadi('lut_center_x', 'lut_center_y',
                                                                                  self.center_lane,
                                                                                  self.element_arc_lengths)
@@ -654,13 +673,12 @@ class MPCKinematicNode:
                                                                                    self.element_arc_lengths)
         self.center_point_angles = np.arctan2(center_derivative_data[:, 1], center_derivative_data[:, 0])
 
-
         # Interpolate right and left wall line
         self.right_lut_x, self.right_lut_y = self.get_interpolated_path_casadi('lut_right_x', 'lut_right_y', right_lane,
                                                                                self.element_arc_lengths)
         self.left_lut_x, self.left_lut_y = self.get_interpolated_path_casadi('lut_left_x', 'lut_left_y', left_lane,
                                                                              self.element_arc_lengths)
-        for i in range(10):
+        for i in range(5):
             self.publish_path(center_lane, self.center_path_pub)
             self.publish_path(right_lane, self.right_path_pub)
             self.publish_path(left_lane, self.left_path_pub)
@@ -707,17 +725,17 @@ class MPCKinematicNode:
             # Update system inputs: U=[speed(v), steering]
             v = self.current_vel_odom
             steering = self.steering_angle  # radian
+            dt = 1.0 / self.CONTROLLER_FREQ
             L = self.mpc.L
 
             current_s, near_idx = self.find_current_arc_length(car_pos)
 
             if self.DELAY_MODE:
-                dt_lag=self.LAG_TIME
-                px = px+ v*np.cos(psi)*dt_lag
-                py = py+ v*np.sin(psi)*dt_lag
-                psi= psi+ (v/L)*tan(steering)*dt_lag
-                current_s = current_s+self.projected_vel*dt_lag
-
+                dt_lag = 3 * dt
+                px = px + v * np.cos(psi) * dt_lag
+                py = py + v * np.sin(psi) * dt_lag
+                psi = psi + (v / L) * tan(steering) * dt_lag
+                current_s = current_s + self.projected_vel * dt_lag
             current_state = np.array([px, py, psi, current_s])
 
             centerPose = PoseStamped()
@@ -727,10 +745,11 @@ class MPCKinematicNode:
             centerPose.pose.orientation = self.heading(self.center_point_angles[near_idx])
             self.center_tangent_pub.publish(centerPose)
 
+            print(car_pos, v, near_idx, current_s, psi)
+
             # Solve MPC Problem
             mpc_time = time.time()
-            first_control, trajectory, control_input_soln = self.mpc.solve(current_state)
-            #use
+            first_control, trajectory = self.mpc.solve(current_state)
             mpc_compute_time = time.time() - mpc_time
             print("Control loop time mpc=:", mpc_compute_time)
 
@@ -740,7 +759,7 @@ class MPCKinematicNode:
             self.projected_vel = float(first_control[2])
             if not self.mpc.WARM_START:
                 speed, steering = 0, 0
-                self.mpc.WARM_START= True
+                self.mpc.WARM_START = True
             if (speed >= self.param['v_max']):
                 speed = self.param['v_max']
             elif (speed <= (- self.param['v_max'] / 2.0)):
@@ -777,6 +796,9 @@ class MPCKinematicNode:
             self.v_plot.append(speed)
             self.steering_plot.append(np.rad2deg(steering))
             self.time_plot.append(mpc_compute_time * 1000)
+
+            # input('str')
+
         else:
             steering = 0.0
             speed = 0.0
@@ -785,7 +807,6 @@ class MPCKinematicNode:
         ackermann_cmd = AckermannDriveStamped()
         ackermann_cmd.header = self.create_header(self.car_frame)
         ackermann_cmd.drive.steering_angle = steering
-        self.steering_angle=steering
         ackermann_cmd.drive.speed = speed
         # ackermann_cmd.drive.acceleration = throttle
         self.ackermann_pub.publish(ackermann_cmd)
@@ -806,7 +827,7 @@ class MPCKinematicNode:
         # plt.ylabel('cte in m')
         plt.subplot(414)
         plt.step(self.t_plot, self.time_plot, 'b', linewidth=1.5)
-        plt.ylim(0.0, 100)
+        plt.ylim(0.0, 70)
         plt.ylabel('mpc_compute_time in ms')
         plt.show()
 

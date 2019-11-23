@@ -1,0 +1,67 @@
+ self.param = {'dT': rospy.get_param('dT', 0.25),
+                      'N': rospy.get_param('mpc_steps_N', 18),
+                      'L': rospy.get_param('vehicle_L', 0.325),
+                      'theta_max': rospy.get_param('mpc_max_steering', 0.523),
+                      'v_max': rospy.get_param('max_speed', 6.0),  # 5
+                      'p_min': rospy.get_param('p_min', 0),
+                      'p_max': rospy.get_param('p_max', 6.0),
+                      'x_min': rospy.get_param('x_min', -200),
+                      'x_max': rospy.get_param('x_max', 200),
+                      'y_min': rospy.get_param('y_min', -200),
+                      'y_max': rospy.get_param('y_max', 200),
+                      'psi_min': rospy.get_param('psi_min', -1000),
+                      'psi_max': rospy.get_param('psi_max', 1000),
+                      's_min': rospy.get_param('s_min', 0),
+                      's_max': rospy.get_param('s_max', 200),
+                      'd_v_bound': rospy.get_param('d_v_bound', 2.0),
+                      'd_theta_bound': rospy.get_param('d_theta_bound', 0.5),
+                      'd_p_bound': rospy.get_param('d_p_bound', 2.0),
+                      'ref_vel': rospy.get_param('mpc_ref_vel', 2.5),
+                      'mpc_w_cte': rospy.get_param('mpc_w_cte', 1000),  # 500
+                      'mpc_w_epsi': rospy.get_param('mpc_w_epsi', 50),
+                      'mpc_w_s': rospy.get_param('mpc_w_s', 0),
+                      'mpc_w_lag': rospy.get_param('mpc_w_lag', 1000),  # 1000
+                      'mpc_w_vel': rospy.get_param('mpc_w_vel', 0.05),
+                      'mpc_w_delta': rospy.get_param('mpc_w_delta', 50),
+                      'mpc_w_p': rospy.get_param('mpc_w_p', 0.75),  # 1
+                      'mpc_w_accel': rospy.get_param('mpc_w_accel', 4),
+                      'mpc_w_delta_d': rospy.get_param('mpc_w_delta_d', 1300),  # 600
+                      'mpc_w_delta_p': rospy.get_param('mpc_w_delta_p', 0),
+                      'spline_poly_order': rospy.get_param('spline_poly_order', 3),
+                      'ipopt_verbose': rospy.get_param('ipopt_verbose', True)
+                      }
+
+
+  houssam tutorial backup:
+    self.param = {'dT': rospy.get_param('dT', 0.25),
+      'N': rospy.get_param('mpc_steps_N', 20),
+      'L': rospy.get_param('vehicle_L', 0.325),
+      'theta_max': rospy.get_param('mpc_max_steering', 0.523),
+      'v_max': rospy.get_param('max_speed', 2.0),  # 5
+      'p_min': rospy.get_param('p_min', 0),
+      'p_max': rospy.get_param('p_max', 3.0),
+      'x_min': rospy.get_param('x_min', -200),
+      'x_max': rospy.get_param('x_max', 200),
+      'y_min': rospy.get_param('y_min', -200),
+      'y_max': rospy.get_param('y_max', 200),
+      'psi_min': rospy.get_param('psi_min', -1000),
+      'psi_max': rospy.get_param('psi_max', 1000),
+      's_min': rospy.get_param('s_min', 0),
+      's_max': rospy.get_param('s_max', 200),
+      'd_v_bound': rospy.get_param('d_v_bound', 2.0),
+      'd_theta_bound': rospy.get_param('d_theta_bound', 0.5),
+      'd_p_bound': rospy.get_param('d_p_bound', 2.0),
+      'ref_vel': rospy.get_param('mpc_ref_vel', 1.5),
+      'mpc_w_cte': rospy.get_param('mpc_w_cte', 750),  # 500
+      'mpc_w_epsi': rospy.get_param('mpc_w_epsi', 50),
+      'mpc_w_s': rospy.get_param('mpc_w_s', 0),
+      'mpc_w_lag': rospy.get_param('mpc_w_lag', 750),  # 1000
+      'mpc_w_vel': rospy.get_param('mpc_w_vel', 0.075),
+      'mpc_w_delta': rospy.get_param('mpc_w_delta', 30),
+      'mpc_w_p': rospy.get_param('mpc_w_p', 0.95),  # 1
+      'mpc_w_accel': rospy.get_param('mpc_w_accel', 4),
+      'mpc_w_delta_d': rospy.get_param('mpc_w_delta_d', 1000),  # 600
+      'mpc_w_delta_p': rospy.get_param('mpc_w_delta_p', 0),
+      'spline_poly_order': rospy.get_param('spline_poly_order', 3),
+      'ipopt_verbose': rospy.get_param('ipopt_verbose', True)
+    }

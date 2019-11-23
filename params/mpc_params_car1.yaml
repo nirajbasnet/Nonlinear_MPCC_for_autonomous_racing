@@ -1,18 +1,18 @@
 # Parameter for MPC solver
 dT: 0.2 #unit: s
-mpc_steps_N: 25
+mpc_steps_N: 15
 vehicle_L: 0.325 # distance between the front of the vehicle and its center of gravity
 
-max_speed: 1.5 # unit: m/s
+max_speed: 3.0 # unit: m/s
 mpc_ref_cte: 0.0
 mpc_ref_epsi: 0.0
-mpc_ref_vel: 1.5
+mpc_ref_vel: 3.0
 
-mpc_w_cte: 100
+mpc_w_cte: 700
 mpc_w_lag: 700
 mpc_w_epsi: 0
 mpc_w_vel: 2.0
-mpc_w_p: 40.0
+mpc_w_p: 10.0
 mpc_w_delta: 40
 mpc_w_accel: 10
 mpc_w_delta_d: 1500
@@ -33,10 +33,10 @@ delay_mode: True
 car_width: 0.3
 spline_poly_order: 3
 goal_threshold: 0.6 # unit: m
-controller_freq: 20
+controller_freq: 15
 path_folder_name: kelley
-inflation_factor: 0.25
-lag_time: 0.05
+inflation_factor: 0.65
+lag_time: 0.15
 ipopt_verbose: True
 #Frame names
 car_frame: base_link
