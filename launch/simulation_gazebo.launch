@@ -2,14 +2,14 @@
 <launch>
         <include file="$(find racecar_gazebo)/launch/racecar.launch">
 		  <arg name="world_name" value="track_empty"/>
-		  <arg name="x" default="28.05"/>  <!--28.05, p 8.09,-->
-          <arg name="y" default="25.94"/>  <!--25.94,p 6.26 -->
+		  <arg name="x" default="-0.0655"/>  <!--bat 2.1, k 28.05, p 8.09,-->
+          <arg name="y" default="5.07"/>  <!--bat 0.25,k 25.94,p 6.26 -->
           <arg name="z" default="0.0"/>
-          <arg name="yaw" default="0.807"/>  <!--0.807,p 3.14-->
+          <arg name="yaw" default="3.14"/>  <!--bat 3.14, k 0.807,p 3.14-->
   	</include>
 
   	<!-- Run map server -->
-	<arg name="map_file" default="$(find nonlinear_mpc_casadi)/maps/kelley_third_floor.yaml"/> <!--map_trackporto.yaml-->
+	<arg name="map_file" default="$(find nonlinear_mpc_casadi)/maps/dearborn211_demo_track.yaml"/> <!--map_trackporto.yaml-->
 	<node name="map_server" pkg="map_server" type="map_server" args="$(arg map_file)" />
 
         <node pkg="nonlinear_mpc_casadi" name="remap_gazebo_pose_node" type="remap_gazebo_pose.py" output="screen" />

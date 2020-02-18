@@ -36,5 +36,5 @@ if __name__ == "__main__":
     # Set the update rate
     rospy.Timer(rospy.Duration(.025), timer_callback) # 40hz
     # Set subscribers
-    rospy.Subscriber("gazebo/model_states", ModelStates, robot_pose_update)
+    rospy.Subscriber("/odom", ModelStates, robot_pose_update)
     rospy.spin()

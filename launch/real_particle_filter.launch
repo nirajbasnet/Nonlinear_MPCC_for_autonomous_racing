@@ -3,7 +3,7 @@
 	<include file="$(find racecar)/launch/teleop.launch"/>
   	
   	<!-- Run map server -->
-	<arg name="map_file" default="$(find nonlinear_mpc_casadi)/maps/kelley_third_floor.yaml"/>
+	<arg name="map_file" default="$(find nonlinear_mpc_casadi)/maps/dearborn211_demo_track.yaml"/>
 	<node name="map_server" pkg="map_server" type="map_server" args="$(arg map_file)" />
     
   	<!--<node pkg="tf2_ros" type="static_transform_publisher" name="base_footprint_to_laser" args="0 0 0 0 0 0 base_footprint laser" output="screen"/>-->

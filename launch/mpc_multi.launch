@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+
+<launch>
+
+    <!--  ****** MPC Node ******  -->
+    <group ns="car1_30m">
+         <rosparam file="$(find nonlinear_mpc_casadi)/params/mpc_params_car1.yaml" command="load" />
+        <node name="mpc_node" pkg="nonlinear_mpc_casadi" type="Nonlinear_MPC_node.py" output="screen" />
+    </group>
+
+    <group ns="car2_5m">
+         <rosparam file="$(find nonlinear_mpc_casadi)/params/mpc_params_car2.yaml" command="load" />
+        <node name="mpc_node" pkg="nonlinear_mpc_casadi" type="Nonlinear_MPC_node.py" output="screen" />
+    </group>
+
+
+</launch>

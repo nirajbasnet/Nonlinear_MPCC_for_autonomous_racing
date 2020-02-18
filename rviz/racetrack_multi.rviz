@@ -3,8 +3,9 @@ Panels:
     Help Height: 81
     Name: Displays
     Property Tree Widget:
-      Expanded: ~
-      Splitter Ratio: 0.605095983
+      Expanded:
+        - /PoseArray1
+      Splitter Ratio: 0.602777779
     Tree Height: 772
   - Class: rviz/Selection
     Name: Selection
@@ -82,7 +83,7 @@ Visualization Manager:
       Draw Behind: false
       Enabled: true
       Name: Map
-      Topic: /map
+      Topic: /car1_30m/map
       Unreliable: false
       Use Timestamp: false
       Value: true
@@ -101,9 +102,9 @@ Visualization Manager:
       Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
-      Max Intensity: 9.84303665
+      Max Intensity: 5.73291063
       Min Color: 255; 0; 0
-      Min Intensity: -3.83683133
+      Min Intensity: 1.20962095
       Name: LaserScan
       Position Transformer: XYZ
       Queue Size: 10
@@ -111,7 +112,7 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.00999999978
       Style: Flat Squares
-      Topic: /scan
+      Topic: /car1_30m/scan
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
@@ -296,7 +297,7 @@ Visualization Manager:
       Marker Topic: /boundary_marker
       Name: Boundary_markers
       Namespaces:
-        {}
+        "": true
       Queue Size: 100
       Value: true
     - Alpha: 1
@@ -311,7 +312,7 @@ Visualization Manager:
       Shaft Length: 1
       Shaft Radius: 0.0500000007
       Shape: Arrow
-      Topic: /pf/viz/inferred_pose
+      Topic: /car1_30m/pf/viz/inferred_pose
       Unreliable: false
       Value: true
     - Alpha: 1
@@ -327,8 +328,16 @@ Visualization Manager:
       Shaft Length: 0.230000004
       Shaft Radius: 0.00999999978
       Shape: Arrow (Flat)
-      Topic: /pf/viz/particles
+      Topic: /car1_30m/pf/viz/particles
       Unreliable: false
+      Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /hylaa_viz_outline
+      Name: MarkerArray
+      Namespaces:
+        "": true
+      Queue Size: 100
       Value: true
   Enabled: true
   Global Options:
@@ -345,7 +354,7 @@ Visualization Manager:
     - Class: rviz/FocusCamera
     - Class: rviz/Measure
     - Class: rviz/SetInitialPose
-      Topic: /initialpose
+      Topic: /car1_30m/initialpose
     - Class: rviz/SetGoal
       Topic: /move_base_simple/goal
     - Class: rviz/PublishPoint
@@ -355,25 +364,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 22.6328983
+      Distance: 15.9360371
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.0599999987
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 3.88486695
-        Y: 3.48900294
-        Z: -4.7807126
+        X: 2.79752803
+        Y: 4.22335148
+        Z: -4.08320045
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.0500000007
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.00999999978
-      Pitch: 1.4897964
+      Pitch: 1.50979578
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 4.65540314
+      Yaw: 4.71539593
     Saved: ~
 Window Geometry:
   Displays:

@@ -5,7 +5,6 @@ import os
 from scipy.interpolate import splprep, splev
 import matplotlib.pyplot as plt
 import csv
-from casadi import *
 
 import rospy
 from geometry_msgs.msg import  PoseStamped, Quaternion
@@ -15,7 +14,9 @@ from tf.transformations import quaternion_from_euler, euler_from_quaternion
 
 '''THINGS TO NOTE
 1) Smoothness value(float greater than 0) can be specified to make the path smooth without any sharp transitions.
-2) Notion of right or left wall depends upon the direction of movement in the track.For e.g, if the track is travelled in the anticlockwise direction, 
+2) Scaling can be done to increase the number of points on the track through interpolation. Wall scaling should be significantly
+higher(>=15) than centerline points to get better approximation of track widths.
+3) Notion of right or left wall depends upon the direction of movement in the track.For e.g, if the track is travelled in the anticlockwise direction, 
 then the outer wall becomes right wall and inner wall becomes left wall.
 '''
 
@@ -29,7 +30,7 @@ class RacetrackGen:
         self.CENTER_TRACK_FILENAME = os.path.join(dirname,folder_path + folder_name+'-centerline.csv')
         self.RIGHT_TRACK_FILENAME = os.path.join(dirname, folder_path + folder_name + '-outerwall.csv')
         self.LEFT_TRACK_FILENAME = os.path.join(dirname, folder_path+ folder_name + '-innerwall.csv')
-        self.OUTPUT_FILE_PATH = rospy.get_param('output_path','./generated_tracks/')
+        self.OUTPUT_FILE_PATH = rospy.get_param('output_path',os.path.join(dirname,'generated_tracks/'))
         self.center_path = Path()
         self.center_tangent_pub = rospy.Publisher('/center_tangent',PoseStamped,queue_size=1)
         self.right_tangent_pub = rospy.Publisher('/right_tangent', PoseStamped, queue_size=1)
