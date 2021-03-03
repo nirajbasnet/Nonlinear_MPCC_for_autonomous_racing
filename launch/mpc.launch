@@ -1,9 +1,0 @@
-<?xml version="1.0"?>
-
-<launch>
-
-    <!--  ****** MPC Node ******  -->
-    <rosparam file="$(find nonlinear_mpc_casadi)/params/mpc_params.yaml" command="load" />
-    <node name="mpc_node" pkg="nonlinear_mpc_casadi" type="Nonlinear_MPC_node.py" output="screen" />
-
-</launch>

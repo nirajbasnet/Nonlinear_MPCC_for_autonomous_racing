@@ -1,7 +1,0 @@
-<?xml version="1.0"?>
-<launch>
-  <node pkg="mpc_racecar" name="path_from_waypoints_publisher" type="path_from_waypoints.py"  output="screen">
-      <param name="waypoints_filepath" value="$(find mpc_racecar)/waypoints/kelley_third_floor.csv"/>
-  </node>
-</launch>
-

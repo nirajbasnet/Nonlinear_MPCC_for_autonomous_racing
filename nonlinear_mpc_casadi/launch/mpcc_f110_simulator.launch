@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+
+<launch>
+
+    <!--  ****** MPCC Node ******  -->
+    <rosparam file="$(find nonlinear_mpc_casadi)/params/mpc_params_light_simul.yaml" command="load" />
+    <node name="mpc_node" pkg="nonlinear_mpc_casadi" type="Nonlinear_MPC_node.py" output="screen" />
+    <node name="remap_simulator_pose" pkg="nonlinear_mpc_casadi" type="remap_light_simulator_pose.py" />
+
+</launch>

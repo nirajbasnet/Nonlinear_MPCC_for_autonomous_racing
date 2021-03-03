@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+
+<launch>
+
+    <!--  ****** MPCC Node ******  -->
+    <rosparam file="$(find nonlinear_mpc_casadi)/params/mpc_params_fssim.yaml" command="load" />
+    <node name="mpc_node" pkg="nonlinear_mpc_casadi" type="Nonlinear_MPC_node.py" output="screen" />
+    <node name="fssim_cmd_interface" pkg="nonlinear_mpc_casadi" type="fssim_cmd_interface.py" />
+
+</launch>

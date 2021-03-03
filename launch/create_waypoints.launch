@@ -1,6 +1,0 @@
-<?xml version="1.0"?>
-<launch>
-  <node pkg="mpc_racecar" name="create_waypoints_node" type="create_waypoints.py" output="screen">
-      <param name="waypoint_filepath" value="$(find mpc_racecar)/waypoints/waypoints.csv" />
-  </node>
-</launch>
