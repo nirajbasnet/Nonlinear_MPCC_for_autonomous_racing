@@ -60,6 +60,15 @@ tracking precision over speed.
   <img  src="./nonlinear_mpc_casadi/gifs/mpcc_tracking.gif" alt="mpcc_f110_tracking">
 </p>
 
+Here, MPCC is using only kinematic model of the car, but its full dynamic model can also be incorporated. The full
+dynamic model is not included in the repo here as it is part of the competition codebase.
+
+A sample clip showing the full dynamic model with tyre forces is shown below:
+
+<p align="center">
+  <img  src="./nonlinear_mpc_casadi/gifs/mpcc_dynamic_f110.gif" alt="mpcc_f110_top_view">
+</p>
+
 
 [FSSIM](https://github.com/AMZ-Driverless/fssim) is a vehicle simulator dedicated for Formula Student Driverless Competition. 
 It was developed for autonomous software testing purposes. You can find the installation and workspace setup instructions for the FSSIM 
@@ -70,8 +79,7 @@ After you have setup the FSSIM simulator, you can run MPCC on the car by simply 
 roslaunch nonlinear_mpc_casadi mpcc_fssim.launch     
 ```
 
-Few sample clips of the MPCC in operation are shown below. Here, MPCC is using only kinematic model of the car, but its full dynamic model can also be incorporated. The full
-dynamic model is not included in the repo here as it is part of the competition codebase.
+Few sample clips of the MPCC in operation on FSSIM are shown below. 
 The parameters of the MPCC can be tuned in `mpc_params_fssim.yaml` file located in `params` folder inside the package.
 
 <p align="center">
